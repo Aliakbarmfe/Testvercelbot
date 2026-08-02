@@ -13,20 +13,20 @@ function addLog(type, data) {
 }
 
 module.exports = async (req, res) => {
-  // ۱. اکشن ویژه برای ست کردن وب‌هوک فقط با باز کردن لینک: testvercelbot.vercel.app/api?setwebhook=1
+  // ۱. ست کردن وب‌هوک با متد صحیح updateBotEndpoint
   if (req.method === 'GET' && req.query.setwebhook === '1') {
     try {
-      // تلاش برای ست کردن وب‌هوک روی روبیکا
-      const response = await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/setWebhook`, {
-        url: VERCEL_URL
+      const response = await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/updateBotEndpoint`, {
+        url: VERCEL_URL,
+        type: "receiveUpdate"
       });
-      return res.status(200).json({ message: "پاسخ روبیکا برای ست کردن وب‌هوک:", data: response.data });
+      return res.status(200).json({ message: "نتیجه اتصال وب‌هوک:", data: response.data });
     } catch (error) {
       return res.status(200).json({ error: error.message, details: error.response?.data || null });
     }
   }
 
-  // ۲. صفحه اصلی مانیتورینگ
+  // ۲. صفحه اصلی داشبورد
   if (req.method === 'GET') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(`
@@ -48,7 +48,7 @@ module.exports = async (req, res) => {
         <h2>📊 وضعیت بات روبیکا (ورسل)</h2>
         <div class="card">
           <a href="/api" class="btn">🔄 بروزرسانی صفحه</a>
-          <a href="/api?setwebhook=1" class="btn btn-green">⚡ تنظیم خودکار وب‌هوک روی روبیکا</a>
+          <a href="/api?setwebhook=1" class="btn btn-green">⚡ تنظیم خودکار وب‌هوک روبیکا</a>
         </div>
 
         <h2>💬 آخرین پیام دریافتی</h2>
@@ -68,17 +68,17 @@ module.exports = async (req, res) => {
     `);
   }
 
-  // ۳. دریافت پیام‌ها از سمت روبیکا
+  // ۳. دریافت وب‌هوک از روبیکا
   if (req.method === 'POST') {
     try {
       const body = req.body;
-      addLog('INFO', { message: 'پیام جدید از روبیکا رسید', body });
+      addLog('INFO', { message: 'پیام جدید دریافت شد', body });
 
       if (body?.update?.new_message) {
         const msg = body.update.new_message;
         global.lastMessage = {
           sender: msg.sender_id,
-          text: msg.text || '[فایل یا پیام غیر متنی]',
+          text: msg.text || '[پیام غیرمتنی]',
           time: msg.time,
           chat_id: body.update.chat_id
         };
@@ -86,7 +86,7 @@ module.exports = async (req, res) => {
         if (body.update.chat_id) {
           await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/sendMessage`, {
             chat_id: body.update.chat_id,
-            text: `✅ پیام شما دریافت شد:\n"${msg.text}"`
+            text: `✅ پیام شما در ورسل دریافت شد:\n"${msg.text}"`
           });
         }
       }
