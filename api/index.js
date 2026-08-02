@@ -2,80 +2,78 @@ const axios = require('axios');
 
 const BOT_TOKEN = "BJAGFE0AVAZUFDXTFIYQRPKPOBEUTVMRTUNRPDLXXWNYUBEVEJZFEGQHTWPJFTHE";
 
-global.logs = global.logs || [];
-global.lastOffset = global.lastOffset || null;
-
-function addLog(type, data) {
-  const timestamp = new Date().toISOString();
-  global.logs.unshift({ timestamp, type, data });
-  if (global.logs.length > 20) global.logs.pop();
-}
+// ذخیره شناسه آخرین پیامی که پاسخ داده شده در حافظه موقت ورسل
+let processedMessageIds = new Set();
 
 module.exports = async (req, res) => {
-  // ۱. بررسی و دریافت پیام‌های جدید روبیکا (Polling)
   if (req.method === 'GET' && req.query.check === '1') {
     try {
-      // دریافت بروزرسانی‌ها از روبیکا
+      // دریافت پیام‌های جدید از روبیکا
       const response = await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/getUpdates`, {
-        limit: 10,
-        offset: global.lastOffset
+        limit: 10
       });
 
       const updates = response.data?.data?.updates || [];
-      addLog('INFO', `تعداد ${updates.length} رویداد جدید دریافت شد.`);
+      
+      if (updates.length === 0) {
+        return res.status(200).json({ status: "OK", message: "پیام جدیدی وجود ندارد." });
+      }
 
-      for (const update of updates) {
-        global.lastOffset = update.update_id;
-        if (update.new_message) {
-          const msg = update.new_message;
-          
-          // پاسخ خودکار به کاربر
+      // گرفتن آخرین پیام لیست برای جلوگیری از پاسخ به پیام‌های قدیمی
+      const latestUpdate = updates[updates.length - 1];
+
+      if (latestUpdate && latestUpdate.new_message) {
+        const msg = latestUpdate.new_message;
+        const msgId = msg.message_id;
+
+        // بررسی اینکه آیا این پیام قبلاً پاسخ داده شده یا نه
+        if (!processedMessageIds.has(msgId)) {
+          processedMessageIds.add(msgId);
+
+          // جلوگیری از پر شدن حافظه
+          if (processedMessageIds.size > 50) {
+            processedMessageIds.clear();
+          }
+
+          // پاسخ فقط به جدیدترین پیام
           await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/sendMessage`, {
-            chat_id: update.chat_id,
-            text: `✅ پیام شما دریافت شد:\n"${msg.text}"`
+            chat_id: latestUpdate.chat_id,
+            text: `✅ پیام جدید شما دریافت شد:\n"${msg.text}"`
           });
-          
-          addLog('SUCCESS', `پاسخ به ${msg.sender_id} ارسال شد: ${msg.text}`);
+
+          return res.status(200).json({ 
+            status: "OK", 
+            message: "پاسخ به آخرین پیام ارسال شد", 
+            text: msg.text 
+          });
+        } else {
+          return res.status(200).json({ status: "OK", message: "پیام جدیدی یافت نشد (پیام‌ها قبلا پاسخ داده شده‌اند)." });
         }
       }
 
-      return res.status(200).json({ status: "OK", updates_count: updates.length, data: response.data });
+      return res.status(200).json({ status: "OK", updates_count: updates.length });
     } catch (error) {
-      addLog('ERROR', { error: error.message, details: error.response?.data || null });
       return res.status(200).json({ error: error.message, details: error.response?.data || null });
     }
   }
 
-  // ۲. صفحه نمایش داشبورد
+  // صفحه ساده مانیتورینگ
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   return res.status(200).send(`
     <!DOCTYPE html>
     <html lang="fa" dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>ربات روبیکا - چک کردن پیام‌ها</title>
+      <title>ربات روبیکا</title>
       <style>
-        body { font-family: Tahoma, sans-serif; background: #0f172a; color: #f8fafc; padding: 15px; }
-        .card { background: #1e293b; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #334155; }
-        pre { background: #020617; padding: 10px; border-radius: 6px; color: #a7f3d0; direction: ltr; text-align: left; overflow-x: auto; }
-        .btn { background: #16a34a; color: white; padding: 12px 20px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: bold; }
+        body { font-family: Tahoma, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; text-align: center; }
+        .btn { background: #16a34a; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; }
       </style>
     </head>
     <body>
-      <h2>🤖 پنل مدیریت بات روبیکا</h2>
-      <div class="card">
-        <p>برای دریافت پیام‌های جدید و ارسال پاسخ خودکار روی دکمه زیر بزنید:</p>
-        <a href="/api?check=1" class="btn">📥 دریافت و پاسخ به پیام‌های جدید</a>
-      </div>
-
-      <h2>🛠️ گزارش‌ها (Logs)</h2>
-      ${global.logs.map(log => `
-        <div class="card">
-          <small>${log.timestamp} - <strong>[${log.type}]</strong></small>
-          <pre>${JSON.stringify(log.data, null, 2)}</pre>
-        </div>
-      `).join('')}
+      <h2>🤖 ربات روبیکا فعال است</h2>
+      <br>
+      <a href="/api?check=1" class="btn">📥 بررسی پیام‌های جدید</a>
     </body>
     </html>
   `);
