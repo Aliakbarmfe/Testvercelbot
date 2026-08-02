@@ -13,20 +13,24 @@ function addLog(type, data) {
 }
 
 module.exports = async (req, res) => {
-  // ۱. ست کردن وب‌هوک با متد صحیح updateBotEndpoint
+  // ۱. تنظیم وب‌هوک طبق فرمت استاندارد API روبیکا
   if (req.method === 'GET' && req.query.setwebhook === '1') {
     try {
-      const response = await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/updateBotEndpoint`, {
-        url: VERCEL_URL,
-        type: "receiveUpdate"
+      // ساختار درست درخواست به API روبیکا
+      const response = await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/`, {
+        method: "updateBotEndpoint",
+        input: {
+          url: VERCEL_URL,
+          type: "receiveUpdate"
+        }
       });
-      return res.status(200).json({ message: "نتیجه اتصال وب‌هوک:", data: response.data });
+      return res.status(200).json({ message: "پاسخ روبیکا:", data: response.data });
     } catch (error) {
       return res.status(200).json({ error: error.message, details: error.response?.data || null });
     }
   }
 
-  // ۲. صفحه اصلی داشبورد
+  // ۲. صفحه مانیتورینگ مرورگر
   if (req.method === 'GET') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(`
@@ -48,7 +52,7 @@ module.exports = async (req, res) => {
         <h2>📊 وضعیت بات روبیکا (ورسل)</h2>
         <div class="card">
           <a href="/api" class="btn">🔄 بروزرسانی صفحه</a>
-          <a href="/api?setwebhook=1" class="btn btn-green">⚡ تنظیم خودکار وب‌هوک روبیکا</a>
+          <a href="/api?setwebhook=1" class="btn btn-green">⚡ تنظیم دقیق وب‌هوک روبیکا</a>
         </div>
 
         <h2>💬 آخرین پیام دریافتی</h2>
@@ -68,7 +72,7 @@ module.exports = async (req, res) => {
     `);
   }
 
-  // ۳. دریافت وب‌هوک از روبیکا
+  // ۳. دریافت پیام‌ها از سمت روبیکا
   if (req.method === 'POST') {
     try {
       const body = req.body;
@@ -84,9 +88,13 @@ module.exports = async (req, res) => {
         };
 
         if (body.update.chat_id) {
-          await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/sendMessage`, {
-            chat_id: body.update.chat_id,
-            text: `✅ پیام شما در ورسل دریافت شد:\n"${msg.text}"`
+          // ارسال پاسخ به کاربر با فرمت درست روبیکا
+          await axios.post(`https://botapi.rubika.ir/v3/${BOT_TOKEN}/`, {
+            method: "sendMessage",
+            input: {
+              chat_id: body.update.chat_id,
+              text: `✅ پیام شما دریافت شد:\n"${msg.text}"`
+            }
           });
         }
       }
